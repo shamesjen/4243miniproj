@@ -83,7 +83,7 @@ def main():
 
     # 创建和训练模型
     model = create_model()
-    model.fit(x_train, y_train, epochs=15, validation_split=0.1, shuffle=True)
+    model.fit(x_train, y_train, epochs=20, validation_split=0.1, shuffle=True)
 
     # 测试模型
     test_loss, test_acc = model.evaluate(x_test, y_test, verbose=2)
