@@ -7,6 +7,64 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
+import numpy as np 
+from scipy.ndimage import gaussian_filter1d 
+ 
+def vertical_projection(thresh): 
+    projection = np.sum(thresh, axis=0) 
+    smoothed_projection = gaussian_filter1d(projection, sigma=1) 
+    return smoothed_projection 
+ 
+def drop_fall(thresh, start, end): 
+    h, _ = thresh.shape 
+    drop_positions = [] 
+     
+    # Simulate drops along each column within the segment 
+    for x in range(start, end): 
+        drop_y = 0 
+        for y in range(h): 
+            if thresh[y, x] > 0:  # Pixel intensity detected 
+                drop_y = y 
+        drop_positions.append(drop_y) 
+     
+    # Find potential splitting points where drop_y values show a significant shift 
+    drop_boundaries = [] 
+    for i in range(1, len(drop_positions)): 
+        if abs(drop_positions[i] - drop_positions[i - 1]) > h * 0.1:  # Threshold for split 
+            drop_boundaries.append(start + i) 
+     
+    return drop_boundaries 
+ 
+def segment_by_projection_with_drop_fall(thresh, projection, min_width=5, max_width=100, min_segments=4): 
+    h, w = thresh.shape 
+    segments = [] 
+    in_char = False 
+    start = 0 
+ 
+    for i in range(w): 
+        if projection[i] > 0 and not in_char: 
+            in_char = True 
+            start = i 
+        elif projection[i] == 0 and in_char: 
+            in_char = False 
+            end = i 
+            segment_width = end - start 
+            if segment_width <= max_width: 
+                segments.append((start, end)) 
+            else: 
+                # Apply drop fall algorithm for connected characters 
+                drop_boundaries = drop_fall(thresh, start, end) 
+                prev_boundary = start 
+                for boundary in drop_boundaries: 
+                    segments.append((prev_boundary, boundary)) 
+                    prev_boundary = boundary 
+                segments.append((prev_boundary, end)) 
+ 
+    if len(segments) < min_segments: 
+        segments = [(0, w)] 
+     
+    return segments
+
 
 def preprocess_image(image_path):
     # 读取图像
@@ -96,7 +154,7 @@ def process_dataset(input_dir, output_dir):
                 # 使用第二次膨胀的图像进行二值化和分割
                 thresh = binarize_image(dilated_twice)
                 projection = vertical_projection(thresh)
-                segments = segment_by_projection(thresh, projection, min_width=5, max_width=60)
+                segments = segment_by_projection_with_drop_fall(thresh, projection, min_width=5, max_width=60)
 
                 if len(segments) == len(label_text):
                     for i, (start, end) in enumerate(segments):
